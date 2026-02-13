@@ -31,16 +31,16 @@ mod unauthenticated {
     use chrono::{TimeDelta, TimeZone as _};
     use futures_util::future;
     use futures_util::stream::StreamExt as _;
+    use polymarket_client_sdk::clob::MarketMetadata;
     use polymarket_client_sdk::clob::types::request::{
         LastTradePriceRequest, MidpointRequest, OrderBookSummaryRequest, PriceHistoryRequest,
         PriceRequest, SpreadRequest,
     };
     use polymarket_client_sdk::clob::types::response::{
-        FeeRateResponse, GeoblockResponse, LastTradePriceResponse, LastTradesPricesResponse,
-        MarketResponse, MidpointResponse, MidpointsResponse, NegRiskResponse,
-        OrderBookSummaryResponse, OrderSummary, Page, PriceHistoryResponse, PricePoint,
-        PriceResponse, PricesResponse, Rewards, SimplifiedMarketResponse, SpreadResponse,
-        SpreadsResponse, TickSizeResponse, Token,
+        GeoblockResponse, LastTradePriceResponse, LastTradesPricesResponse, MarketResponse,
+        MidpointResponse, MidpointsResponse, OrderBookSummaryResponse, OrderSummary, Page,
+        PriceHistoryResponse, PricePoint, PriceResponse, PricesResponse, Rewards,
+        SimplifiedMarketResponse, SpreadResponse, SpreadsResponse, Token,
     };
     use polymarket_client_sdk::clob::types::{Interval, Side, TickSize, TimeRange};
     use polymarket_client_sdk::error::Status;
@@ -371,162 +371,44 @@ mod unauthenticated {
     }
 
     #[tokio::test]
-    async fn tick_size_should_succeed() -> anyhow::Result<()> {
-        let server = MockServer::start();
-        let client = Client::new(&server.base_url(), Config::default())?;
+    async fn set_market_metadata_should_prepopulate_cache() -> anyhow::Result<()> {
+        let client = Client::new("http://localhost:0", Config::default())?;
 
-        let mock = server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/tick-size")
-                .query_param("token_id", token_1().to_string());
-            then.status(StatusCode::OK)
-                .json_body(json!({ "minimum_tick_size": "0.1" }));
-        });
+        let metadata = MarketMetadata::new(TickSize::Hundredth, true, 50);
+        client.set_market_metadata(token_1(), metadata);
 
-        let response = client.tick_size(token_1()).await?;
-
-        let expected = TickSizeResponse::builder()
-            .minimum_tick_size(TickSize::Tenth)
-            .build();
-
-        assert_eq!(response, expected);
-        mock.assert();
+        let cached = client.market_metadata(token_1())?;
+        assert_eq!(cached.tick_size, TickSize::Hundredth);
+        assert!(cached.neg_risk);
+        assert_eq!(cached.fee_rate_bps, 50);
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn neg_risk_should_succeed() -> anyhow::Result<()> {
-        let server = MockServer::start();
-        let client = Client::new(&server.base_url(), Config::default())?;
+    async fn market_metadata_should_error_on_cache_miss() -> anyhow::Result<()> {
+        let client = Client::new("http://localhost:0", Config::default())?;
 
-        let mock = server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/neg-risk")
-                .query_param("token_id", token_1().to_string());
-            then.status(StatusCode::OK)
-                .json_body(json!({ "neg_risk": true }));
-        });
-
-        let response = client.neg_risk(token_1()).await?;
-
-        let expected = NegRiskResponse::builder().neg_risk(true).build();
-
-        assert_eq!(response, expected);
-        mock.assert();
+        let result = client.market_metadata(token_1());
+        result.unwrap_err();
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn fee_rate_should_succeed() -> anyhow::Result<()> {
-        let server = MockServer::start();
-        let client = Client::new(&server.base_url(), Config::default())?;
+    async fn invalidate_caches_should_clear_market_metadata() -> anyhow::Result<()> {
+        let client = Client::new("http://localhost:0", Config::default())?;
 
-        let mock = server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/fee-rate")
-                .query_param("token_id", token_1().to_string());
-            then.status(StatusCode::OK)
-                .json_body(json!({ "base_fee": 0 }));
-        });
-
-        let response = client.fee_rate_bps(token_1()).await?;
-
-        let expected = FeeRateResponse::builder().base_fee(0).build();
-
-        assert_eq!(response, expected);
-        mock.assert();
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn set_tick_size_should_prepopulate_cache() -> anyhow::Result<()> {
-        let server = MockServer::start();
-        let client = Client::new(&server.base_url(), Config::default())?;
-
-        // Pre-populate the cache - no HTTP call should be made
-        client.set_tick_size(token_1(), TickSize::Hundredth);
-
-        // This should return the cached value without making an HTTP request
-        let response = client.tick_size(token_1()).await?;
-
-        let expected = TickSizeResponse::builder()
-            .minimum_tick_size(TickSize::Hundredth)
-            .build();
-
-        assert_eq!(response, expected);
-        // No mock was set up, so if an HTTP call was made, this test would fail
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn set_neg_risk_should_prepopulate_cache() -> anyhow::Result<()> {
-        let server = MockServer::start();
-        let client = Client::new(&server.base_url(), Config::default())?;
-
-        // Pre-populate the cache
-        client.set_neg_risk(token_2(), true);
-
-        // This should return the cached value without making an HTTP request
-        let response = client.neg_risk(token_2()).await?;
-
-        let expected = NegRiskResponse::builder().neg_risk(true).build();
-
-        assert_eq!(response, expected);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn set_fee_rate_bps_should_prepopulate_cache() -> anyhow::Result<()> {
-        let server = MockServer::start();
-        let client = Client::new(&server.base_url(), Config::default())?;
-
-        // Pre-populate the cache with 50 basis points (0.50%)
-        client.set_fee_rate_bps(token_1(), 50);
-
-        // This should return the cached value without making an HTTP request
-        let response = client.fee_rate_bps(token_1()).await?;
-
-        let expected = FeeRateResponse::builder().base_fee(50).build();
-
-        assert_eq!(response, expected);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn invalidate_caches_should_clear_prepopulated_values() -> anyhow::Result<()> {
-        let server = MockServer::start();
-        let client = Client::new(&server.base_url(), Config::default())?;
-
-        // Pre-populate the cache
-        client.set_tick_size(token_1(), TickSize::Tenth);
+        client.set_market_metadata(token_1(), MarketMetadata::new(TickSize::Tenth, false, 0));
 
         // Verify the cache works
-        let response = client.tick_size(token_1()).await?;
-        assert_eq!(response.minimum_tick_size, TickSize::Tenth);
+        client.market_metadata(token_1()).unwrap();
 
         // Invalidate the cache
         client.invalidate_internal_caches();
 
-        // Now set up a mock for the HTTP call that will be made after cache invalidation
-        let mock = server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/tick-size")
-                .query_param("token_id", token_1().to_string());
-            then.status(StatusCode::OK)
-                .json_body(json!({ "minimum_tick_size": "0.001" }));
-        });
-
-        // After invalidation, this should make an HTTP call
-        let response = client.tick_size(token_1()).await?;
-
-        assert_eq!(response.minimum_tick_size, TickSize::Thousandth);
-        mock.assert();
+        // After invalidation, lookup should fail
+        client.market_metadata(token_1()).unwrap_err();
 
         Ok(())
     }
@@ -1514,10 +1396,10 @@ mod authenticated {
             .authenticate()
             .await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Thousandth);
+        ensure_requirements(&client, token_1(), TickSize::Thousandth);
 
         assert_eq!(
-            client.tick_size(token_1()).await?.minimum_tick_size,
+            client.market_metadata(token_1())?.tick_size,
             TickSize::Thousandth
         );
 
@@ -1574,7 +1456,9 @@ mod authenticated {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Hundredth);
+        ensure_requirements(&client, token_1(), TickSize::Hundredth);
+        // sign() looks up metadata by the order's tokenId (U256::ZERO for default)
+        ensure_requirements(&client, U256::ZERO, TickSize::Hundredth);
 
         let mock = server.mock(|when, then| {
             when.method(POST)
@@ -1634,7 +1518,8 @@ mod authenticated {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Hundredth);
+        ensure_requirements(&client, token_1(), TickSize::Hundredth);
+        ensure_requirements(&client, U256::ZERO, TickSize::Hundredth);
 
         let mock = server.mock(|when, then| {
             when.method(POST)

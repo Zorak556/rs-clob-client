@@ -20,7 +20,7 @@ use polymarket_client_sdk::POLYGON;
 use polymarket_client_sdk::auth::Normal;
 use polymarket_client_sdk::auth::state::Authenticated;
 use polymarket_client_sdk::clob::types::{SignatureType, TickSize};
-use polymarket_client_sdk::clob::{Client, Config};
+use polymarket_client_sdk::clob::{Client, Config, MarketMetadata};
 use polymarket_client_sdk::types::Decimal;
 use reqwest::StatusCode;
 use serde_json::json;
@@ -101,27 +101,8 @@ pub async fn create_authenticated(server: &MockServer) -> anyhow::Result<TestCli
     Ok(client)
 }
 
-pub fn ensure_requirements(server: &MockServer, token_id: U256, tick_size: TickSize) {
-    server.mock(|when, then| {
-        when.method(httpmock::Method::GET).path("/neg-risk");
-        then.status(StatusCode::OK)
-            .json_body(json!({ "neg_risk": false }));
-    });
-
-    server.mock(|when, then| {
-        when.method(httpmock::Method::GET).path("/fee-rate");
-        then.status(StatusCode::OK)
-            .json_body(json!({ "base_fee": 0 }));
-    });
-
-    server.mock(|when, then| {
-        when.method(httpmock::Method::GET)
-            .path("/tick-size")
-            .query_param("token_id", token_id.to_string());
-        then.status(StatusCode::OK).json_body(json!({
-                "minimum_tick_size": tick_size.as_decimal(),
-        }));
-    });
+pub fn ensure_requirements(client: &TestClient, token_id: U256, tick_size: TickSize) {
+    client.set_market_metadata(token_id, MarketMetadata::new(tick_size, false, 0));
 }
 
 #[must_use]

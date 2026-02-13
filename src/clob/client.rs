@@ -28,6 +28,8 @@ use crate::auth::builder::{Builder, Config as BuilderConfig};
 use crate::auth::state::{Authenticated, State, Unauthenticated};
 use crate::auth::{Credentials, Kind, Normal};
 use crate::clob::order_builder::{Limit, Market, OrderBuilder, generate_seed};
+use rust_decimal::prelude::ToPrimitive as _;
+
 use crate::clob::types::request::{
     BalanceAllowanceRequest, CancelMarketOrderRequest, DeleteNotificationsRequest,
     LastTradePriceRequest, MidpointRequest, OrderBookSummaryRequest, OrdersRequest,
@@ -36,14 +38,13 @@ use crate::clob::types::request::{
 };
 use crate::clob::types::response::{
     ApiKeysResponse, BalanceAllowanceResponse, BanStatusResponse, BuilderApiKeyResponse,
-    BuilderTradeResponse, CancelOrdersResponse, CurrentRewardResponse, FeeRateResponse,
-    GeoblockResponse, HeartbeatResponse, LastTradePriceResponse, LastTradesPricesResponse,
-    MarketResponse, MarketRewardResponse, MidpointResponse, MidpointsResponse, NegRiskResponse,
-    NotificationResponse, OpenOrderResponse, OrderBookSummaryResponse, OrderScoringResponse,
-    OrdersScoringResponse, Page, PostOrderResponse, PriceHistoryResponse, PriceResponse,
-    PricesResponse, RewardsPercentagesResponse, SimplifiedMarketResponse, SpreadResponse,
-    SpreadsResponse, TickSizeResponse, TotalUserEarningResponse, TradeResponse,
-    UserEarningResponse, UserRewardsEarningResponse,
+    BuilderTradeResponse, CancelOrdersResponse, CurrentRewardResponse, GeoblockResponse,
+    HeartbeatResponse, LastTradePriceResponse, LastTradesPricesResponse, MarketResponse,
+    MarketRewardResponse, MidpointResponse, MidpointsResponse, NotificationResponse,
+    OpenOrderResponse, OrderBookSummaryResponse, OrderScoringResponse, OrdersScoringResponse, Page,
+    PostOrderResponse, PriceHistoryResponse, PriceResponse, PricesResponse,
+    RewardsPercentagesResponse, SimplifiedMarketResponse, SpreadResponse, SpreadsResponse,
+    TotalUserEarningResponse, TradeResponse, UserEarningResponse, UserRewardsEarningResponse,
 };
 #[cfg(feature = "rfq")]
 use crate::clob::types::{
@@ -64,6 +65,33 @@ const ORDER_NAME: Option<Cow<'static, str>> = Some(Cow::Borrowed("Polymarket CTF
 const VERSION: Option<Cow<'static, str>> = Some(Cow::Borrowed("1"));
 
 const TERMINAL_CURSOR: &str = "LTE="; // base64("-1")
+
+/// Cached market configuration: tick size, neg risk flag, and fee rate for a token.
+///
+/// Populated by [`Client::cache_market`] or [`Client::set_market_metadata`], and read by
+/// the order builder and signing methods. No fallback HTTP calls are made on cache miss.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy)]
+pub struct MarketMetadata {
+    /// Minimum price increment for orders on this token.
+    pub tick_size: TickSize,
+    /// Whether this token uses the `NegRisk` adapter contract.
+    pub neg_risk: bool,
+    /// Trading fee in basis points (e.g. 10 = 0.10%).
+    pub fee_rate_bps: u32,
+}
+
+impl MarketMetadata {
+    /// Creates a new `MarketMetadata` instance.
+    #[must_use] 
+    pub fn new(tick_size: TickSize, neg_risk: bool, fee_rate_bps: u32) -> Self {
+        Self {
+            tick_size,
+            neg_risk,
+            fee_rate_bps,
+        }
+    }
+}
 
 /// The type used to build a request to authenticate the inner [`Client<Unauthorized>`]. Calling
 /// `authenticate` on this will elevate that inner `client` into an [`Client<Authenticated<K>>`].
@@ -226,9 +254,7 @@ impl<S: Signer, K: Kind> AuthenticationBuilder<'_, S, K> {
                 host: inner.host,
                 geoblock_host: inner.geoblock_host,
                 client: inner.client,
-                tick_sizes: inner.tick_sizes,
-                neg_risk: inner.neg_risk,
-                fee_rate_bps: inner.fee_rate_bps,
+                market_metadata: inner.market_metadata,
                 funder,
                 signature_type: self.signature_type.unwrap_or(SignatureType::Eoa),
                 salt_generator: self.salt_generator.unwrap_or(generate_seed),
@@ -395,12 +421,8 @@ struct ClientInner<S: State> {
     geoblock_host: Url,
     /// The inner [`ReqwestClient`] used to make requests to `host`.
     client: ReqwestClient,
-    /// Local cache of [`TickSize`] per token ID
-    tick_sizes: DashMap<U256, TickSize>,
-    /// Local cache representing whether this token is part of a `neg_risk` market
-    neg_risk: DashMap<U256, bool>,
-    /// Local cache representing the fee rate in basis points per token ID
-    fee_rate_bps: DashMap<U256, u32>,
+    /// Local cache of [`MarketMetadata`] per token ID (tick size, neg risk, fee rate)
+    market_metadata: DashMap<U256, MarketMetadata>,
     /// The funder for this [`ClientInner`]. If funder is present, then `signature_type` cannot
     /// be [`SignatureType::Eoa`]. Conversely, if funder is absent, then `signature_type` cannot be
     /// [`SignatureType::Proxy`] or [`SignatureType::GnosisSafe`].
@@ -500,79 +522,62 @@ impl<S: State> Client<S> {
         &self.inner.host
     }
 
-    /// Invalidates all internal caches (tick sizes, neg risk flags, and fee rates).
+    /// Invalidates all internal market metadata caches.
     ///
-    /// This method clears the cached market configuration data, forcing subsequent
-    /// requests to fetch fresh data from the API. Use this when you suspect
-    /// cached data may be stale.
+    /// This method clears the cached market configuration data. Use this when you
+    /// suspect cached data may be stale.
     pub fn invalidate_internal_caches(&self) {
-        self.inner.tick_sizes.clear();
-        self.inner.fee_rate_bps.clear();
-        self.inner.neg_risk.clear();
+        self.inner.market_metadata.clear();
     }
 
-    /// Pre-populates the tick size cache for a token, avoiding the HTTP call.
+    /// Pre-populates the market metadata cache for a token, avoiding HTTP calls.
     ///
-    /// Use this when you already have the tick size data from another source
+    /// Use this when you already have the market configuration data from another source
     /// (e.g., cached locally or retrieved from a different API).
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use polymarket_client_sdk::clob::{Client, Config, types::TickSize};
-    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use polymarket_client_sdk::types::U256;
-    ///
-    /// let client = Client::new("https://clob.polymarket.com", Config::default())?;
-    /// client.set_tick_size(U256::ZERO, TickSize::Hundredth);
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn set_tick_size(&self, token_id: U256, tick_size: TickSize) {
-        self.inner.tick_sizes.insert(token_id, tick_size);
+    pub fn set_market_metadata(&self, token_id: U256, metadata: MarketMetadata) {
+        self.inner.market_metadata.insert(token_id, metadata);
     }
 
-    /// Pre-populates the neg risk cache for a token, avoiding the HTTP call.
+    /// Extracts metadata from a [`MarketResponse`] and caches it for every token in the market.
     ///
-    /// Use this when you already have the neg risk data from another source
-    /// (e.g., cached locally or retrieved from a different API).
+    /// Converts `MarketResponse.maker_base_fee` (Decimal) to `u32` basis points.
     ///
-    /// # Example
+    /// # Errors
     ///
-    /// ```no_run
-    /// # use polymarket_client_sdk::clob::{Client, Config};
-    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use polymarket_client_sdk::types::U256;
-    ///
-    /// let client = Client::new("https://clob.polymarket.com", Config::default())?;
-    /// client.set_neg_risk(U256::ZERO, true);
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn set_neg_risk(&self, token_id: U256, neg_risk: bool) {
-        self.inner.neg_risk.insert(token_id, neg_risk);
+    /// Returns an error if `minimum_tick_size` is not a recognized tick size value.
+    pub fn cache_market(&self, market: &MarketResponse) -> Result<()> {
+        let tick_size = TickSize::try_from(market.minimum_tick_size)?;
+        let metadata = MarketMetadata {
+            tick_size,
+            neg_risk: market.neg_risk,
+            fee_rate_bps: market.maker_base_fee.to_u32().unwrap_or(0),
+        };
+        for token in &market.tokens {
+            self.inner.market_metadata.insert(token.token_id, metadata);
+        }
+        Ok(())
     }
 
-    /// Pre-populates the fee rate cache for a token, avoiding the HTTP call.
+    /// Returns the cached [`MarketMetadata`] for the given token ID.
     ///
-    /// Use this when you already have the fee rate data from another source
-    /// (e.g., cached locally or retrieved from a different API). The fee rate
-    /// is specified in basis points (bps), where 100 bps = 1%.
+    /// The caller must have previously fetched the market via [`Client::market`] (which
+    /// auto-caches), or manually pre-populated via [`Client::set_market_metadata`] or
+    /// [`Client::cache_market`].
     ///
-    /// # Example
+    /// # Errors
     ///
-    /// ```no_run
-    /// # use polymarket_client_sdk::clob::{Client, Config};
-    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use polymarket_client_sdk::types::U256;
-    ///
-    /// let client = Client::new("https://clob.polymarket.com", Config::default())?;
-    /// client.set_fee_rate_bps(U256::ZERO, 10); // 0.10% fee
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn set_fee_rate_bps(&self, token_id: U256, fee_rate_bps: u32) {
-        self.inner.fee_rate_bps.insert(token_id, fee_rate_bps);
+    /// Returns an error if no metadata is cached for the token.
+    pub fn market_metadata(&self, token_id: U256) -> Result<MarketMetadata> {
+        self.inner
+            .market_metadata
+            .get(&token_id)
+            .map(|entry| *entry)
+            .ok_or_else(|| {
+                Error::validation(format!(
+                    "No cached market metadata for token {token_id}. \
+                     Call `market()`, `cache_market()`, or `set_market_metadata()` first."
+                ))
+            })
     }
 
     /// Checks if the CLOB API is healthy and operational.
@@ -749,119 +754,6 @@ impl<S: State> Client<S> {
         crate::request(&self.inner.client, request, None).await
     }
 
-    /// Retrieves the minimum tick size for a market outcome token.
-    ///
-    /// The tick size defines the minimum price increment for orders on this token.
-    /// Results are cached internally to reduce API calls. For example, a tick size
-    /// of 0.01 means prices must be in increments of $0.01.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the request fails or the token ID is invalid.
-    pub async fn tick_size(&self, token_id: U256) -> Result<TickSizeResponse> {
-        if let Some(tick_size) = self.inner.tick_sizes.get(&token_id) {
-            #[cfg(feature = "tracing")]
-            tracing::trace!(token_id = %token_id, tick_size = ?tick_size.value(), "cache hit: tick_size");
-            return Ok(TickSizeResponse {
-                minimum_tick_size: *tick_size,
-            });
-        }
-
-        #[cfg(feature = "tracing")]
-        tracing::trace!(token_id = %token_id, "cache miss: tick_size");
-
-        let request = self
-            .client()
-            .request(Method::GET, format!("{}tick-size", self.host()))
-            .query(&[("token_id", token_id.to_string())])
-            .build()?;
-
-        let response =
-            crate::request::<TickSizeResponse>(&self.inner.client, request, None).await?;
-
-        self.inner
-            .tick_sizes
-            .insert(token_id, response.minimum_tick_size);
-
-        #[cfg(feature = "tracing")]
-        tracing::trace!(token_id = %token_id, "cached tick_size");
-
-        Ok(response)
-    }
-
-    /// Checks if a market outcome token uses the negative risk (`NegRisk`) adapter.
-    ///
-    /// `NegRisk` markets have special settlement logic where one outcome is
-    /// "negative" (representing an event not happening). Returns `true` if the
-    /// token requires the `NegRisk` adapter contract. Results are cached internally.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the request fails or the token ID is invalid.
-    pub async fn neg_risk(&self, token_id: U256) -> Result<NegRiskResponse> {
-        if let Some(neg_risk) = self.inner.neg_risk.get(&token_id) {
-            #[cfg(feature = "tracing")]
-            tracing::trace!(token_id = %token_id, neg_risk = *neg_risk, "cache hit: neg_risk");
-            return Ok(NegRiskResponse {
-                neg_risk: *neg_risk,
-            });
-        }
-
-        #[cfg(feature = "tracing")]
-        tracing::trace!(token_id = %token_id, "cache miss: neg_risk");
-
-        let request = self
-            .client()
-            .request(Method::GET, format!("{}neg-risk", self.host()))
-            .query(&[("token_id", token_id.to_string())])
-            .build()?;
-
-        let response = crate::request::<NegRiskResponse>(&self.inner.client, request, None).await?;
-
-        self.inner.neg_risk.insert(token_id, response.neg_risk);
-
-        #[cfg(feature = "tracing")]
-        tracing::trace!(token_id = %token_id, "cached neg_risk");
-
-        Ok(response)
-    }
-
-    /// Retrieves the trading fee rate for a market outcome token.
-    ///
-    /// Returns the fee rate in basis points (bps) charged on trades for this token.
-    /// For example, 10 bps = 0.10% fee. Results are cached internally to reduce API calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the request fails or the token ID is invalid.
-    pub async fn fee_rate_bps(&self, token_id: U256) -> Result<FeeRateResponse> {
-        if let Some(base_fee) = self.inner.fee_rate_bps.get(&token_id) {
-            #[cfg(feature = "tracing")]
-            tracing::trace!(token_id = %token_id, base_fee = *base_fee, "cache hit: fee_rate_bps");
-            return Ok(FeeRateResponse {
-                base_fee: *base_fee,
-            });
-        }
-
-        #[cfg(feature = "tracing")]
-        tracing::trace!(token_id = %token_id, "cache miss: fee_rate_bps");
-
-        let request = self
-            .client()
-            .request(Method::GET, format!("{}fee-rate", self.host()))
-            .query(&[("token_id", token_id.to_string())])
-            .build()?;
-
-        let response = crate::request::<FeeRateResponse>(&self.inner.client, request, None).await?;
-
-        self.inner.fee_rate_bps.insert(token_id, response.base_fee);
-
-        #[cfg(feature = "tracing")]
-        tracing::trace!(token_id = %token_id, "cached fee_rate_bps");
-
-        Ok(response)
-    }
-
     /// Checks if the current IP address is geoblocked from accessing Polymarket.
     ///
     /// This method queries the Polymarket geoblock endpoint to determine if access
@@ -1023,7 +915,11 @@ impl<S: State> Client<S> {
             )
             .build()?;
 
-        crate::request(&self.inner.client, request, None).await
+        let response: MarketResponse = crate::request(&self.inner.client, request, None).await?;
+
+        self.cache_market(&response)?;
+
+        Ok(response)
     }
 
     /// Retrieves a page of all active markets.
@@ -1205,9 +1101,7 @@ impl Client<Unauthenticated> {
                 host: Url::parse(host)?,
                 geoblock_host,
                 client,
-                tick_sizes: DashMap::new(),
-                neg_risk: DashMap::new(),
-                fee_rate_bps: DashMap::new(),
+                market_metadata: DashMap::new(),
                 state: Unauthenticated,
                 funder: None,
                 signature_type: SignatureType::Eoa,
@@ -1317,9 +1211,7 @@ impl<K: Kind> Client<Authenticated<K>> {
                 geoblock_host: inner.geoblock_host,
                 config: inner.config,
                 client: inner.client,
-                tick_sizes: inner.tick_sizes,
-                neg_risk: inner.neg_risk,
-                fee_rate_bps: inner.fee_rate_bps,
+                market_metadata: inner.market_metadata,
                 // Reset the order parameters that were previously stored on the client
                 funder: None,
                 signature_type: SignatureType::Eoa,
@@ -1437,7 +1329,7 @@ impl<K: Kind> Client<Authenticated<K>> {
         }: SignableOrder,
     ) -> Result<SignedOrder> {
         let token_id = order.tokenId;
-        let neg_risk = self.neg_risk(token_id).await?.neg_risk;
+        let neg_risk = self.market_metadata(token_id)?.neg_risk;
         let chain_id = signer
             .chain_id()
             .expect("Validated not none in `authenticate`");
@@ -2170,9 +2062,7 @@ impl Client<Authenticated<Normal>> {
             host: inner.host,
             geoblock_host: inner.geoblock_host,
             client: inner.client,
-            tick_sizes: inner.tick_sizes,
-            neg_risk: inner.neg_risk,
-            fee_rate_bps: inner.fee_rate_bps,
+            market_metadata: inner.market_metadata,
             funder: inner.funder,
             signature_type: inner.signature_type,
             salt_generator: inner.salt_generator,

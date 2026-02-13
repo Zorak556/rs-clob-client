@@ -61,25 +61,16 @@ async fn unauthenticated() -> anyhow::Result<()> {
     )?;
 
     let thread = tokio::spawn(async move {
-        let (ok_result, tick_result, neg_risk_result) = join!(
-            client_clone.ok(),
-            client_clone.tick_size(token_id),
-            client_clone.neg_risk(token_id)
-        );
-
-        match ok_result {
+        match client_clone.ok().await {
             Ok(s) => info!(endpoint = "ok", thread = true, result = %s),
             Err(e) => error!(endpoint = "ok", thread = true, error = %e),
         }
 
-        match tick_result {
-            Ok(t) => info!(endpoint = "tick_size", thread = true, tick_size = ?t.minimum_tick_size),
-            Err(e) => error!(endpoint = "tick_size", thread = true, error = %e),
-        }
-
-        match neg_risk_result {
-            Ok(n) => info!(endpoint = "neg_risk", thread = true, neg_risk = n.neg_risk),
-            Err(e) => error!(endpoint = "neg_risk", thread = true, error = %e),
+        match client_clone.market_metadata(token_id) {
+            Ok(m) => {
+                info!(endpoint = "market_metadata", thread = true, tick_size = %m.tick_size, neg_risk = m.neg_risk);
+            }
+            Err(e) => error!(endpoint = "market_metadata", thread = true, error = %e),
         }
 
         anyhow::Ok(())
@@ -90,16 +81,11 @@ async fn unauthenticated() -> anyhow::Result<()> {
         Err(e) => error!(endpoint = "ok", error = %e),
     }
 
-    match client.tick_size(token_id).await {
-        Ok(t) => {
-            info!(endpoint = "tick_size", token_id = %token_id, tick_size = ?t.minimum_tick_size);
+    match client.market_metadata(token_id) {
+        Ok(m) => {
+            info!(endpoint = "market_metadata", token_id = %token_id, tick_size = %m.tick_size, neg_risk = m.neg_risk);
         }
-        Err(e) => error!(endpoint = "tick_size", token_id = %token_id, error = %e),
-    }
-
-    match client.neg_risk(token_id).await {
-        Ok(n) => info!(endpoint = "neg_risk", token_id = %token_id, neg_risk = n.neg_risk),
-        Err(e) => error!(endpoint = "neg_risk", token_id = %token_id, error = %e),
+        Err(e) => error!(endpoint = "market_metadata", token_id = %token_id, error = %e),
     }
 
     thread.await?

@@ -146,13 +146,8 @@ impl<K: AuthKind> OrderBuilder<Limit, K> {
             )));
         }
 
-        let fee_rate = self.client.fee_rate_bps(token_id).await?;
-        let minimum_tick_size = self
-            .client
-            .tick_size(token_id)
-            .await?
-            .minimum_tick_size
-            .as_decimal();
+        let metadata = self.client.market_metadata(token_id)?;
+        let minimum_tick_size = metadata.tick_size.as_decimal();
 
         let decimals = minimum_tick_size.scale();
 
@@ -239,7 +234,7 @@ impl<K: AuthKind> OrderBuilder<Limit, K> {
             makerAmount: U256::from(to_fixed_u128(maker_amount)),
             takerAmount: U256::from(to_fixed_u128(taker_amount)),
             side: side as u8,
-            feeRateBps: U256::from(fee_rate.base_fee),
+            feeRateBps: U256::from(metadata.fee_rate_bps),
             nonce: U256::from(nonce),
             signer: self.signer,
             expiration: U256::from(expiration.timestamp().to_u64().ok_or(Error::validation(
@@ -377,13 +372,8 @@ impl<K: AuthKind> OrderBuilder<Market, K> {
             None => self.calculate_price(order_type.clone()).await?,
         };
 
-        let minimum_tick_size = self
-            .client
-            .tick_size(token_id)
-            .await?
-            .minimum_tick_size
-            .as_decimal();
-        let fee_rate = self.client.fee_rate_bps(token_id).await?;
+        let metadata = self.client.market_metadata(token_id)?;
+        let minimum_tick_size = metadata.tick_size.as_decimal();
 
         let decimals = minimum_tick_size.scale();
 
@@ -451,7 +441,7 @@ impl<K: AuthKind> OrderBuilder<Market, K> {
             makerAmount: U256::from(to_fixed_u128(maker_amount)),
             takerAmount: U256::from(to_fixed_u128(taker_amount)),
             side: side as u8,
-            feeRateBps: U256::from(fee_rate.base_fee),
+            feeRateBps: U256::from(metadata.fee_rate_bps),
             nonce: U256::from(nonce),
             signer: self.signer,
             expiration: U256::ZERO,

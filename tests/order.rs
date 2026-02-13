@@ -38,8 +38,8 @@ mod lifecycle {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
-        ensure_requirements(&server, token_2(), TickSize::Thousandth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_2(), TickSize::Thousandth);
 
         let signable_order = client
             .limit_order()
@@ -89,8 +89,8 @@ mod lifecycle {
             .authenticate()
             .await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
-        ensure_requirements(&server, token_2(), TickSize::Thousandth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_2(), TickSize::Thousandth);
 
         let signable_order = client
             .limit_order()
@@ -143,7 +143,7 @@ mod lifecycle {
             .authenticate()
             .await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
 
         let signable_order = client
             .limit_order()
@@ -214,7 +214,7 @@ mod lifecycle {
 
         mock.assert();
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
 
         let signable_order = client
             .limit_order()
@@ -235,7 +235,7 @@ mod lifecycle {
         assert_eq!(signable_order.order.side, Side::Buy as u8);
         assert_ne!(signable_order.order.maker, signable_order.order.signer);
 
-        ensure_requirements(&server, token_2(), TickSize::Tenth);
+        ensure_requirements(&client, token_2(), TickSize::Tenth);
 
         let signable_order = client
             .limit_order()
@@ -287,7 +287,7 @@ mod lifecycle {
 
         mock.assert();
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
 
         let signable_order = client
             .limit_order()
@@ -308,13 +308,15 @@ mod lifecycle {
         assert_eq!(signable_order.order.side, Side::Buy as u8);
         assert_ne!(signable_order.order.maker, signable_order.order.signer);
 
-        ensure_requirements(&server, token_2(), TickSize::Tenth);
+        ensure_requirements(&client, token_2(), TickSize::Tenth);
 
         client.deauthenticate().await?;
         let client = Client::new(&server.base_url(), Config::default())?
             .authentication_builder(&signer)
             .authenticate()
             .await?;
+
+        ensure_requirements(&client, token_2(), TickSize::Tenth);
 
         let signable_order = client
             .limit_order()
@@ -411,7 +413,7 @@ mod lifecycle {
             .authenticate()
             .await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
 
         let signable_order = client
             .limit_order()
@@ -451,7 +453,7 @@ mod lifecycle {
             .authenticate()
             .await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
 
         let signable_order = client
             .limit_order()
@@ -502,7 +504,7 @@ mod lifecycle {
             .authenticate()
             .await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
 
         let signable_order = client
             .limit_order()
@@ -575,7 +577,7 @@ mod limit {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
 
         let err = client
             .limit_order()
@@ -600,7 +602,7 @@ mod limit {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
 
         let err = client
             .limit_order()
@@ -625,7 +627,7 @@ mod limit {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
 
         let err = client
             .limit_order()
@@ -663,7 +665,7 @@ mod limit {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Hundredth);
+        ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
         let err = client
             .limit_order()
@@ -691,7 +693,7 @@ mod limit {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Tenth);
+        ensure_requirements(&client, token_1(), TickSize::Tenth);
 
         let err = client
             .limit_order()
@@ -734,7 +736,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Tenth);
+            ensure_requirements(&client, token_1(), TickSize::Tenth);
 
             let signable_order = client
                 .limit_order()
@@ -774,7 +776,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let signable_order = client
                 .limit_order()
@@ -814,7 +816,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Thousandth);
+            ensure_requirements(&client, token_1(), TickSize::Thousandth);
 
             let signable_order = client
                 .limit_order()
@@ -854,7 +856,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::TenThousandth);
+            ensure_requirements(&client, token_1(), TickSize::TenThousandth);
 
             let signable_order = client
                 .limit_order()
@@ -894,7 +896,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let signable_order = client
                 .limit_order()
@@ -916,7 +918,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let signable_order = client
                 .limit_order()
@@ -938,7 +940,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let err = client
                 .limit_order()
@@ -964,7 +966,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let signable_order = client
                 .limit_order()
@@ -996,7 +998,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Tenth);
+            ensure_requirements(&client, token_1(), TickSize::Tenth);
 
             let signable_order = client
                 .limit_order()
@@ -1036,7 +1038,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let signable_order = client
                 .limit_order()
@@ -1076,7 +1078,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Thousandth);
+            ensure_requirements(&client, token_1(), TickSize::Thousandth);
 
             let signable_order = client
                 .limit_order()
@@ -1116,7 +1118,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::TenThousandth);
+            ensure_requirements(&client, token_1(), TickSize::TenThousandth);
 
             let signable_order = client
                 .limit_order()
@@ -1156,7 +1158,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let signable_order = client
                 .limit_order()
@@ -1178,7 +1180,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let signable_order = client
                 .limit_order()
@@ -1200,7 +1202,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let err = client
                 .limit_order()
@@ -1227,7 +1229,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let signable_order = client
                 .limit_order()
@@ -1252,7 +1254,7 @@ mod limit {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
 
             let signable_order = client
                 .limit_order()
@@ -1275,11 +1277,11 @@ mod limit {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements(&server, token_1(), TickSize::Thousandth);
-        ensure_requirements(&server, token_2(), TickSize::Hundredth);
+        ensure_requirements(&client, token_1(), TickSize::Thousandth);
+        ensure_requirements(&client, token_2(), TickSize::Hundredth);
 
         assert_eq!(
-            client.tick_size(token_1()).await?.minimum_tick_size,
+            client.market_metadata(token_1())?.tick_size,
             TickSize::Thousandth
         );
 
@@ -1345,6 +1347,7 @@ mod market {
 
     fn ensure_requirements_for_market_price(
         server: &MockServer,
+        client: &crate::common::TestClient,
         token_id: U256,
         bids: &[OrderSummary],
         asks: &[OrderSummary],
@@ -1367,22 +1370,10 @@ mod market {
             }));
         });
 
-        server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/tick-size")
-                .query_param("token_id", token_id.to_string());
-            then.status(StatusCode::OK).json_body(json!({
-                "minimum_tick_size": minimum_tick_size.as_decimal(),
-            }));
-        });
-
-        server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/fee-rate")
-                .query_param("token_id", token_id.to_string());
-            then.status(StatusCode::OK)
-                .json_body(json!({ "base_fee": 0 }));
-        });
+        // Only set default metadata if the caller hasn't already cached a specific tick size.
+        if client.market_metadata(token_id).is_err() {
+            ensure_requirements(client, token_id, minimum_tick_size);
+        }
     }
 
     mod buy {
@@ -1398,7 +1389,7 @@ mod market {
                 let server = MockServer::start();
                 let client = create_authenticated(&server).await?;
 
-                ensure_requirements_for_market_price(&server, token_1(), &[], &[]);
+                ensure_requirements_for_market_price(&server, &client, token_1(), &[], &[]);
 
                 let err = client
                     .market_order()
@@ -1426,6 +1417,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[],
                     &[
@@ -1466,6 +1458,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[],
                     &[
@@ -1526,6 +1519,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[],
                     &[
@@ -1572,6 +1566,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[],
                     &[
@@ -1618,6 +1613,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[],
                     &[
@@ -1666,7 +1662,7 @@ mod market {
                 let server = MockServer::start();
                 let client = create_authenticated(&server).await?;
 
-                ensure_requirements_for_market_price(&server, token_1(), &[], &[]);
+                ensure_requirements_for_market_price(&server, &client, token_1(), &[], &[]);
 
                 let err = client
                     .market_order()
@@ -1693,6 +1689,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[],
                     &[
@@ -1748,6 +1745,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[],
                     &[
@@ -1793,6 +1791,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[],
                     &[
@@ -1838,6 +1837,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[],
                     &[
@@ -1883,6 +1883,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[],
                     &[
@@ -1927,10 +1928,11 @@ mod market {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Tenth);
+            ensure_requirements(&client, token_1(), TickSize::Tenth);
             // Always gives a market price of 0.5 for 100
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[],
                 &[OrderSummary::builder()
@@ -1975,10 +1977,11 @@ mod market {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
             // Always gives a market price of 0.56 for 100
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[],
                 &[OrderSummary::builder()
@@ -2024,10 +2027,11 @@ mod market {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Thousandth);
+            ensure_requirements(&client, token_1(), TickSize::Thousandth);
             // Always gives a market price of 0.056 for 100
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[],
                 &[OrderSummary::builder()
@@ -2073,10 +2077,11 @@ mod market {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::TenThousandth);
+            ensure_requirements(&client, token_1(), TickSize::TenThousandth);
             // Always gives a market price of 0.0056 for 100
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[],
                 &[OrderSummary::builder()
@@ -2125,7 +2130,7 @@ mod market {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements_for_market_price(&server, token_1(), &[], &[]);
+            ensure_requirements_for_market_price(&server, &client, token_1(), &[], &[]);
 
             let err = client
                 .market_order()
@@ -2157,6 +2162,7 @@ mod market {
             // only 50 shares available on asks
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[],
                 &[OrderSummary::builder()
@@ -2195,6 +2201,7 @@ mod market {
             // cutoff price should end at 0.4 for 250 shares
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[],
                 &[
@@ -2232,6 +2239,7 @@ mod market {
             // cutoff price should end at 0.4 for 250 shares
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[],
                 &[
@@ -2274,7 +2282,7 @@ mod market {
                 let server = MockServer::start();
                 let client = create_authenticated(&server).await?;
 
-                ensure_requirements_for_market_price(&server, token_1(), &[], &[]);
+                ensure_requirements_for_market_price(&server, &client, token_1(), &[], &[]);
 
                 let err = client
                     .market_order()
@@ -2302,6 +2310,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2342,6 +2351,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2402,6 +2412,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2448,6 +2459,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2494,6 +2506,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2540,6 +2553,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2588,7 +2602,7 @@ mod market {
                 let server = MockServer::start();
                 let client = create_authenticated(&server).await?;
 
-                ensure_requirements_for_market_price(&server, token_1(), &[], &[]);
+                ensure_requirements_for_market_price(&server, &client, token_1(), &[], &[]);
 
                 let err = client
                     .market_order()
@@ -2615,6 +2629,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2670,6 +2685,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2715,6 +2731,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2760,6 +2777,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2805,6 +2823,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2850,6 +2869,7 @@ mod market {
 
                 ensure_requirements_for_market_price(
                     &server,
+                    &client,
                     token_1(),
                     &[
                         OrderSummary::builder()
@@ -2894,10 +2914,11 @@ mod market {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Tenth);
+            ensure_requirements(&client, token_1(), TickSize::Tenth);
             // Always gives a market price of 0.5 for 100
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[OrderSummary::builder()
                     .price(dec!(0.5))
@@ -2942,10 +2963,11 @@ mod market {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Hundredth);
+            ensure_requirements(&client, token_1(), TickSize::Hundredth);
             // Always gives a market price of 0.56 for 100
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[OrderSummary::builder()
                     .price(dec!(0.56))
@@ -2991,10 +3013,11 @@ mod market {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::Thousandth);
+            ensure_requirements(&client, token_1(), TickSize::Thousandth);
             // Always gives a market price of 0.056 for 100
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[OrderSummary::builder()
                     .price(dec!(0.056))
@@ -3040,10 +3063,11 @@ mod market {
             let server = MockServer::start();
             let client = create_authenticated(&server).await?;
 
-            ensure_requirements(&server, token_1(), TickSize::TenThousandth);
+            ensure_requirements(&client, token_1(), TickSize::TenThousandth);
             // Always gives a market price of 0.0056 for 100
             ensure_requirements_for_market_price(
                 &server,
+                &client,
                 token_1(),
                 &[OrderSummary::builder()
                     .price(dec!(0.0056))
@@ -3131,7 +3155,7 @@ mod market {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements_for_market_price(&server, token_1(), &[], &[]);
+        ensure_requirements_for_market_price(&server, &client, token_1(), &[], &[]);
 
         let err = client
             .market_order()
@@ -3157,7 +3181,7 @@ mod market {
         let server = MockServer::start();
         let client = create_authenticated(&server).await?;
 
-        ensure_requirements_for_market_price(&server, token_1(), &[], &[]);
+        ensure_requirements_for_market_price(&server, &client, token_1(), &[], &[]);
 
         let err = client
             .market_order()

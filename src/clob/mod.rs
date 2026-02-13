@@ -30,12 +30,9 @@
 //! | `/last-trade-price` | Most recent trade price |
 //! | `/last-trades-prices` | Batch last trade prices |
 //! | `/prices-all` | All token prices |
-//! | `/tick-size` | Minimum price increment (cached) |
-//! | `/neg-risk` | `NegRisk` adapter flag (cached) |
-//! | `/fee-rate-bps` | Trading fee in basis points (cached) |
 //! | `/book` | Full orderbook depth |
 //! | `/books` | Batch orderbooks |
-//! | `/market` | Single market details |
+//! | `/markets/{id}` | Single market details (auto-caches metadata) |
 //! | `/markets` | All markets (paginated) |
 //! | `/sampling-markets` | Sampling program markets |
 //! | `/simplified-markets` | Markets with reduced detail |
@@ -149,4 +146,4 @@ pub mod types;
 #[cfg(feature = "ws")]
 pub mod ws;
 
-pub use client::{Client, Config};
+pub use client::{Client, Config, MarketMetadata};

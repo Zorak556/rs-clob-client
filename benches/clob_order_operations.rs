@@ -13,8 +13,8 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use polymarket_client_sdk::POLYGON;
 use polymarket_client_sdk::auth::Normal;
 use polymarket_client_sdk::auth::state::Authenticated;
-use polymarket_client_sdk::clob::Client;
 use polymarket_client_sdk::clob::types::{OrderType, Side, TickSize};
+use polymarket_client_sdk::clob::{Client, MarketMetadata};
 use polymarket_client_sdk::types::{Decimal, U256};
 use rust_decimal_macros::dec;
 
@@ -38,10 +38,8 @@ async fn setup_client() -> (Client<Authenticated<Normal>>, PrivateKeySigner) {
         .await
         .expect("authentication succeeds");
 
-    // Pre-cache tick size and fee rate to avoid HTTP requests during benchmarking
-    client.set_tick_size(token_id, TickSize::Hundredth);
-    client.set_fee_rate_bps(token_id, 0);
-    client.set_neg_risk(token_id, false);
+    // Pre-cache market metadata to avoid HTTP requests during benchmarking
+    client.set_market_metadata(token_id, MarketMetadata::new(TickSize::Hundredth, false, 0));
 
     (client, signer)
 }

@@ -232,31 +232,15 @@ async fn main() -> anyhow::Result<()> {
             Err(e) => error!(endpoint = "spreads", error = %e),
         }
 
-        match client.tick_size(token_id).await {
-            Ok(tick_size) => info!(
-                endpoint = "tick_size",
+        match client.market_metadata(token_id) {
+            Ok(metadata) => info!(
+                endpoint = "market_metadata",
                 token_id = %token_id,
-                tick_size = %tick_size.minimum_tick_size
+                tick_size = %metadata.tick_size,
+                neg_risk = metadata.neg_risk,
+                fee_rate_bps = metadata.fee_rate_bps
             ),
-            Err(e) => error!(endpoint = "tick_size", token_id = %token_id, error = %e),
-        }
-
-        match client.neg_risk(token_id).await {
-            Ok(neg_risk) => info!(
-                endpoint = "neg_risk",
-                token_id = %token_id,
-                neg_risk = neg_risk.neg_risk
-            ),
-            Err(e) => error!(endpoint = "neg_risk", token_id = %token_id, error = %e),
-        }
-
-        match client.fee_rate_bps(token_id).await {
-            Ok(fee_rate) => info!(
-                endpoint = "fee_rate_bps",
-                token_id = %token_id,
-                base_fee = fee_rate.base_fee
-            ),
-            Err(e) => error!(endpoint = "fee_rate_bps", token_id = %token_id, error = %e),
+            Err(e) => error!(endpoint = "market_metadata", token_id = %token_id, error = %e),
         }
 
         let order_book_request = OrderBookSummaryRequest::builder()
