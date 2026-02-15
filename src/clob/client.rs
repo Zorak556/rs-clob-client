@@ -83,7 +83,7 @@ pub struct MarketMetadata {
 
 impl MarketMetadata {
     /// Creates a new `MarketMetadata` instance.
-    #[must_use] 
+    #[must_use]
     pub fn new(tick_size: TickSize, neg_risk: bool, fee_rate_bps: u32) -> Self {
         Self {
             tick_size,
