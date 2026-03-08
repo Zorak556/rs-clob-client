@@ -29,6 +29,7 @@ use reqwest::{
     header::{HeaderMap, HeaderValue},
 };
 use serde::Serialize;
+use crate::HttpClient;
 use serde::de::DeserializeOwned;
 use url::Url;
 
@@ -66,7 +67,7 @@ use crate::{Result, ToQueryParams as _};
 #[derive(Clone, Debug)]
 pub struct Client {
     host: Url,
-    client: ReqwestClient,
+    client: HttpClient,
 }
 
 impl Default for Client {
@@ -93,16 +94,18 @@ impl Client {
         headers.insert("Accept", HeaderValue::from_static("*/*"));
         headers.insert("Connection", HeaderValue::from_static("keep-alive"));
         headers.insert("Content-Type", HeaderValue::from_static("application/json"));
-        let client = ReqwestClient::builder()
-            .default_headers(headers)
-            .tcp_nodelay(true)
-            .pool_idle_timeout(std::time::Duration::from_secs(90))
-            .tcp_keepalive(std::time::Duration::from_secs(30))
-            .http2_keep_alive_interval(std::time::Duration::from_secs(10))
-            .http2_keep_alive_timeout(std::time::Duration::from_secs(5))
-            .http2_adaptive_window(true)
-            .connect_timeout(std::time::Duration::from_secs(5))
-            .build()?;
+        let client = crate::build_http_client(
+            ReqwestClient::builder()
+                .default_headers(headers)
+                .tcp_nodelay(true)
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
+                .tcp_keepalive(std::time::Duration::from_secs(30))
+                .http2_keep_alive_interval(std::time::Duration::from_secs(10))
+                .http2_keep_alive_timeout(std::time::Duration::from_secs(5))
+                .http2_adaptive_window(true)
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .build()?,
+        );
 
         Ok(Self {
             host: Url::parse(host)?,

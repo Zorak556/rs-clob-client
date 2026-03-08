@@ -226,6 +226,13 @@ impl From<reqwest::Error> for Error {
     }
 }
 
+#[cfg(feature = "tracing")]
+impl From<reqwest_middleware::Error> for Error {
+    fn from(e: reqwest_middleware::Error) -> Self {
+        Error::with_source(Kind::Internal, e)
+    }
+}
+
 impl From<header::InvalidHeaderValue> for Error {
     fn from(e: header::InvalidHeaderValue) -> Self {
         Error::with_source(Kind::Internal, e)

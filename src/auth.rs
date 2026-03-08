@@ -267,7 +267,8 @@ pub(crate) mod l2 {
 /// Specific structs and methods used in configuring and authenticating the Builder flow
 pub mod builder {
     use reqwest::header::HeaderMap;
-    use reqwest::{Client, Request};
+    use reqwest::Request;
+    use crate::HttpClient;
     use secrecy::ExposeSecret as _;
     use serde::{Deserialize, Serialize};
     use serde_json::json;
@@ -321,7 +322,7 @@ pub mod builder {
     #[derive(Clone, Debug)]
     pub struct Builder {
         pub(crate) config: Config,
-        pub(crate) client: Client,
+        pub(crate) client: HttpClient,
     }
 
     impl Builder {
@@ -524,7 +525,7 @@ mod tests {
 
         let builder = builder::Builder {
             config,
-            client: Client::default(),
+            client: crate::build_http_client(Client::default()),
         };
 
         let headers = builder.create_headers(&request, timestamp).await?;

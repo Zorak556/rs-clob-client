@@ -3186,6 +3186,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "matchit"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f926ade0c4e170215ae43342bf13b9310a437609c81f29f86c5df6657582ef9"
+
+[[package]]
 name = "memchr"
 version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3556,6 +3562,8 @@ dependencies = [
  "phf",
  "rand 0.10.0",
  "reqwest 0.13.2",
+ "reqwest-middleware",
+ "reqwest-tracing",
  "rust_decimal",
  "rust_decimal_macros",
  "secrecy",
@@ -4042,6 +4050,37 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "reqwest-middleware"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "199dda04a536b532d0cc04d7979e39b1c763ea749bf91507017069c00b96056f"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http 1.4.0",
+ "reqwest 0.13.2",
+ "serde",
+ "thiserror 2.0.17",
+ "tower-service",
+]
+
+[[package]]
+name = "reqwest-tracing"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5c1a1510677d43dce9e9c0c07fc5db8772c0e5a43e4f9cef75a11affa05a578"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "getrandom 0.2.16",
+ "http 1.4.0",
+ "matchit",
+ "reqwest 0.13.2",
+ "reqwest-middleware",
+ "tracing",
 ]
 
 [[package]]

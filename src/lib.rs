@@ -45,6 +45,28 @@ use crate::types::{Address, address};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// HTTP client type — wraps reqwest with tracing middleware when the `tracing` feature is enabled.
+#[cfg(feature = "tracing")]
+pub(crate) type HttpClient = reqwest_middleware::ClientWithMiddleware;
+#[cfg(not(feature = "tracing"))]
+pub(crate) type HttpClient = reqwest::Client;
+
+#[cfg(any(feature = "bridge", feature = "clob", feature = "data", feature = "gamma"))]
+pub(crate) fn build_http_client(client: reqwest::Client) -> HttpClient {
+    #[cfg(feature = "tracing")]
+    {
+        reqwest_middleware::ClientBuilder::new(client)
+            .with(reqwest_tracing::TracingMiddleware::<
+                reqwest_tracing::SpanBackendWithUrl,
+            >::new())
+            .build()
+    }
+    #[cfg(not(feature = "tracing"))]
+    {
+        client
+    }
+}
+
 /// [`ChainId`] for Polygon mainnet
 pub const POLYGON: ChainId = 137;
 
@@ -253,7 +275,7 @@ impl<T: Serialize> ToQueryParams for T {}
     )
 )]
 async fn request<Response: DeserializeOwned>(
-    client: &reqwest::Client,
+    client: &HttpClient,
     mut request: Request,
     headers: Option<HeaderMap>,
 ) -> Result<Response> {

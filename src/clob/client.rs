@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::mem;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 #[cfg(feature = "heartbeats")]
 use std::time::Duration;
 
@@ -17,6 +18,7 @@ use futures::Stream;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Client as ReqwestClient, Method, Request};
 use serde_json::json;
+use crate::HttpClient;
 #[cfg(all(feature = "tracing", feature = "heartbeats"))]
 use tracing::{debug, error};
 use url::Url;
@@ -225,6 +227,8 @@ impl<S: Signer, K: Kind> AuthenticationBuilder<'_, S, K> {
                 funder,
                 signature_type: self.signature_type.unwrap_or(SignatureType::Eoa),
                 salt_generator: self.salt_generator.unwrap_or(generate_seed),
+                server_time_offset: AtomicI64::new(inner.server_time_offset.load(Ordering::Relaxed)),
+                server_time_calibrated: AtomicBool::new(inner.server_time_calibrated.load(Ordering::Relaxed)),
             }),
             #[cfg(feature = "heartbeats")]
             heartbeat_token: DroppingCancellationToken(None),
@@ -386,8 +390,8 @@ struct ClientInner<S: State> {
     host: Url,
     /// The [`Url`] for the geoblock API endpoint.
     geoblock_host: Url,
-    /// The inner [`ReqwestClient`] used to make requests to `host`.
-    client: ReqwestClient,
+    /// The inner HTTP client used to make requests to `host`.
+    client: HttpClient,
     /// Local cache of [`TickSize`] per token ID
     tick_sizes: DashMap<U256, TickSize>,
     /// Local cache representing whether this token is part of a `neg_risk` market
@@ -402,6 +406,11 @@ struct ClientInner<S: State> {
     signature_type: SignatureType,
     /// The salt/seed generator for use in creating [`SignableOrder`]s
     salt_generator: fn() -> u64,
+    /// Cached offset (in seconds) between server time and local time.
+    /// `server_time ≈ Utc::now() + offset`. Set by [`calibrate_server_time`].
+    server_time_offset: AtomicI64,
+    /// Whether [`server_time_offset`] has been calibrated.
+    server_time_calibrated: AtomicBool,
 }
 
 impl<S: State> ClientInner<S> {
@@ -465,10 +474,12 @@ impl ClientInner<Unauthenticated> {
             "Chain id not set, be sure to provide one on the signer",
         ))?;
 
-        let timestamp = if self.config.use_server_time {
+        let timestamp = if self.config.use_server_time
+            && !self.server_time_calibrated.load(Ordering::Acquire)
+        {
             self.server_time().await?
         } else {
-            Utc::now().timestamp()
+            Utc::now().timestamp() + self.server_time_offset.load(Ordering::Relaxed)
         };
 
         auth::l1::create_headers(signer, chain_id, timestamp, nonce).await
@@ -566,6 +577,38 @@ impl<S: State> Client<S> {
     /// ```
     pub fn set_fee_rate_bps(&self, token_id: U256, fee_rate_bps: u32) {
         self.inner.fee_rate_bps.insert(token_id, fee_rate_bps);
+    }
+
+    /// Pre-fetches and caches `fee_rate_bps`, `tick_size`, and `neg_risk` for a token
+    /// concurrently. Subsequent calls to order building and signing will hit the cache
+    /// instead of making sequential HTTP requests.
+    pub async fn prefetch_token(&self, token_id: U256) -> Result<()> {
+        let (fee, tick, neg) = futures::future::try_join3(
+            self.fee_rate_bps(token_id),
+            self.tick_size(token_id),
+            self.neg_risk(token_id),
+        )
+        .await?;
+        drop((fee, tick, neg));
+        Ok(())
+    }
+
+    /// Calibrates the cached server time offset by fetching the server time once
+    /// and computing the delta from local time. After calibration, authenticated
+    /// requests use `Utc::now() + offset` instead of making a `GET /time` round-trip.
+    ///
+    /// Call this once at startup or on market discovery.
+    pub async fn calibrate_server_time(&self) -> Result<()> {
+        let server_ts = self.inner.server_time().await?;
+        let local_ts = Utc::now().timestamp();
+        let offset = server_ts - local_ts;
+        self.inner.server_time_offset.store(offset, Ordering::Relaxed);
+        self.inner.server_time_calibrated.store(true, Ordering::Release);
+
+        #[cfg(feature = "tracing")]
+        tracing::info!(offset_secs = offset, "Server time offset calibrated");
+
+        Ok(())
     }
 
     /// Checks if the CLOB API is healthy and operational.
@@ -1144,7 +1187,7 @@ impl<S: State> Client<S> {
         }
     }
 
-    fn client(&self) -> &ReqwestClient {
+    fn client(&self) -> &HttpClient {
         &self.inner.client
     }
 }
@@ -1183,16 +1226,18 @@ impl Client<Unauthenticated> {
         headers.insert("Connection", HeaderValue::from_static("keep-alive"));
         headers.insert("Content-Type", HeaderValue::from_static("application/json"));
 
-        let client = ReqwestClient::builder()
-            .default_headers(headers)
-            .tcp_nodelay(true)
-            .pool_idle_timeout(std::time::Duration::from_secs(90))
-            .tcp_keepalive(std::time::Duration::from_secs(30))
-            .http2_keep_alive_interval(std::time::Duration::from_secs(10))
-            .http2_keep_alive_timeout(std::time::Duration::from_secs(5))
-            .http2_adaptive_window(true)
-            .connect_timeout(std::time::Duration::from_secs(5))
-            .build()?;
+        let client = crate::build_http_client(
+            ReqwestClient::builder()
+                .default_headers(headers)
+                .tcp_nodelay(true)
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
+                .tcp_keepalive(std::time::Duration::from_secs(30))
+                .http2_keep_alive_interval(std::time::Duration::from_secs(10))
+                .http2_keep_alive_timeout(std::time::Duration::from_secs(5))
+                .http2_adaptive_window(true)
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .build()?,
+        );
 
         let geoblock_host = Url::parse(
             config
@@ -1214,6 +1259,8 @@ impl Client<Unauthenticated> {
                 funder: None,
                 signature_type: SignatureType::Eoa,
                 salt_generator: generate_seed,
+                server_time_offset: AtomicI64::new(0),
+                server_time_calibrated: AtomicBool::new(false),
             }),
             #[cfg(feature = "heartbeats")]
             heartbeat_token: DroppingCancellationToken(None),
@@ -1326,6 +1373,8 @@ impl<K: Kind> Client<Authenticated<K>> {
                 funder: None,
                 signature_type: SignatureType::Eoa,
                 salt_generator: generate_seed,
+                server_time_offset: AtomicI64::new(inner.server_time_offset.load(Ordering::Relaxed)),
+                server_time_calibrated: AtomicBool::new(inner.server_time_calibrated.load(Ordering::Relaxed)),
             }),
             #[cfg(feature = "heartbeats")]
             heartbeat_token: DroppingCancellationToken(None),
@@ -2098,10 +2147,12 @@ impl<K: Kind> Client<Authenticated<K>> {
     }
 
     async fn create_headers(&self, request: &Request) -> Result<HeaderMap> {
-        let timestamp = if self.inner.config.use_server_time {
+        let timestamp = if self.inner.config.use_server_time
+            && !self.inner.server_time_calibrated.load(Ordering::Acquire)
+        {
             self.server_time().await?
         } else {
-            Utc::now().timestamp()
+            Utc::now().timestamp() + self.inner.server_time_offset.load(Ordering::Relaxed)
         };
 
         auth::l2::create_headers(self.state(), request, timestamp).await
@@ -2178,6 +2229,8 @@ impl Client<Authenticated<Normal>> {
             funder: inner.funder,
             signature_type: inner.signature_type,
             salt_generator: inner.salt_generator,
+            server_time_offset: AtomicI64::new(inner.server_time_offset.load(Ordering::Relaxed)),
+            server_time_calibrated: AtomicBool::new(inner.server_time_calibrated.load(Ordering::Relaxed)),
         };
 
         #[cfg_attr(
