@@ -283,7 +283,7 @@ async fn request<Response: DeserializeOwned>(
     let path = request.url().path().to_owned();
 
     if let Some(h) = headers {
-        *request.headers_mut() = h;
+        request.headers_mut().extend(h);
     }
 
     let response = client.execute(request).await?;

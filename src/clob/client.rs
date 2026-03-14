@@ -1736,7 +1736,7 @@ impl<K: Kind> Client<Authenticated<K>> {
             .json(&request)
             .build()?;
         let headers = self.create_headers(&request).await?;
-        *request.headers_mut() = headers;
+        request.headers_mut().extend(headers);
 
         // We have to send the request separately from `self.request` because this endpoint does
         // not return anything in the response body. Otherwise, we would get an EOF error from reqwest
@@ -1802,7 +1802,7 @@ impl<K: Kind> Client<Authenticated<K>> {
             .build()?;
         let headers = self.create_headers(&request).await?;
 
-        *request.headers_mut() = headers;
+        request.headers_mut().extend(headers);
 
         // We have to send the request separately from `self.request` because this endpoint does
         // not return anything in the response body. Otherwise, we would get an EOF error from reqwest
@@ -2274,7 +2274,7 @@ impl Client<Authenticated<Builder>> {
             .build()?;
         let headers = self.create_headers(&request).await?;
 
-        *request.headers_mut() = headers;
+        request.headers_mut().extend(headers);
 
         // We have to send the request separately from `self.request` because this endpoint does
         // not return anything in the response body. Otherwise, we would get an EOF error from reqwest
@@ -2485,7 +2485,7 @@ impl<K: Kind> Client<Authenticated<K>> {
         let method = request.method().clone();
         let path = request.url().path().to_owned();
 
-        *request.headers_mut() = headers;
+        request.headers_mut().extend(headers);
 
         let response = self.inner.client.execute(request).await?;
         let status = response.status();

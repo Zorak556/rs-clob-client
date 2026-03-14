@@ -8,7 +8,6 @@ use tracing::warn;
 use crate::auth::ApiKey;
 use crate::clob::types::{OrderStatusType, Side, TraderSide};
 use crate::clob::ws::interest::MessageInterest;
-use crate::error::Kind;
 use crate::types::{B256, Decimal, U256};
 
 /// Top-level WebSocket message wrapper.
@@ -492,9 +491,19 @@ pub fn parse_if_interested(
     bytes: &[u8],
     interest: &MessageInterest,
 ) -> crate::Result<Vec<WsMessage>> {
-    // Parse JSON once into Value
-    let value: Value = serde_json::from_slice(bytes)
-        .map_err(|err| crate::error::Error::with_source(Kind::Internal, Box::new(err)))?;
+    // Parse JSON once into Value. The server sends plain-text control messages
+    // (e.g. "INVALID MARKETS") that aren't JSON — treat them as empty.
+    let value: Value = match serde_json::from_slice(bytes) {
+        Ok(v) => v,
+        Err(_) => {
+            #[cfg(feature = "tracing")]
+            tracing::debug!(
+                text = %String::from_utf8_lossy(bytes),
+                "Ignoring non-JSON WebSocket message"
+            );
+            return Ok(vec![]);
+        }
+    };
 
     match &value {
         Value::Object(map) => {
